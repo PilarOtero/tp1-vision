@@ -40,3 +40,45 @@ def aplicar_anms(keypoints, des, n_deseados):
     
     return keypoints_finales, descriptores_filtrados
 
+def obtener_matches_cross_check(des_src, des_dst):
+    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck = True)
+    matches = bf.match(des_src, des_dst)
+    matches = sorted(matches, key=lambda m: m.distance)
+
+    return matches
+
+def obtener_matches_flann_lowe(des_src, des_dst, ratio=0.75):
+    FLANN_INDEX_KDTREE = 1
+
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+
+    search_params = dict(checks=50)
+
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+    matches_knn = flann.knnMatch(des_src, des_dst, k=2)
+
+    good_matches = []
+    for match in matches_knn:
+        if len(match) != 2:
+            continue
+
+        m, n = match
+
+        if m.distance < ratio * n.distance:
+            good_matches.append(m)
+
+    good_matches = sorted(good_matches, key=lambda m: m.distance)
+
+    return good_matches
+
+def visualizar_matches(img_src, kp_src, img_dst, kp_dst, matches, titulo, n_matches=80):
+    img_matches = cv2.drawMatches(
+        img_src, kp_src,
+        img_dst, kp_dst,
+        matches[:n_matches],
+        None,
+        flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
+    )
+
+    show_images([img_matches], titles=[titulo], figsize=(18, 8))
