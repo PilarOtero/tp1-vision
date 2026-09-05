@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 def achicar(img, max_dim = 1000):
     altura, ancho = img.shape[:2]
@@ -82,3 +83,50 @@ def resumen_matches(matches, nombre):
     print(f"Distancia mínima: {distancias.min():.2f}")
     print(f"Distancia máxima: {distancias.max():.2f}")
     print()
+
+def mostrar_imagen_con_grilla(img, titulo="", paso=50, figsize=(12, 10)):
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    h, w = img_rgb.shape[:2]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.imshow(img_rgb)
+    ax.set_title(titulo)
+
+    ax.set_xticks(np.arange(0, w + 1, paso))
+    ax.set_yticks(np.arange(0, h + 1, paso))
+    ax.grid(color="yellow", linestyle="-", linewidth=0.5, alpha=0.7)
+
+    ax.set_xlim(0, w)
+    ax.set_ylim(h, 0)
+
+    plt.show()
+
+def dlt(ori, dst):
+
+    # Construct matrix A and vector b
+    A = []
+    b = []
+    for i in range(4):
+        x, y = ori[i]
+        x_prima, y_prima = dst[i]
+        A.append([-x, -y, -1, 0, 0, 0, x * x_prima, y * x_prima])
+        A.append([0, 0, 0, -x, -y, -1, x * y_prima, y * y_prima])
+        b.append(x_prima)
+        b.append(y_prima)
+
+    A = np.array(A)
+    b = np.array(b)
+
+    # resolvemos el sistema de ecuaciones A * h = b
+    # el sistema es de 8x8, por lo que podemos resolverlo si A es inversible
+
+    # resuelve el sistema de ecuaciones para encontrar los parámetros de H
+    H = -np.linalg.solve(A, b)
+
+    # agrega el elemento h_33
+    H = np.hstack([H, [1]])
+
+    # reorganiza H para formar la matrix en 3x3 to form the 3x3 homography matrix
+    H = H.reshape(3, 3)
+
+    return H
