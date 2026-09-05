@@ -72,13 +72,13 @@ def obtener_matches_flann_lowe(des_src, des_dst, ratio=0.75):
 
     return good_matches
 
-def visualizar_matches(img_src, kp_src, img_dst, kp_dst, matches, titulo, n_matches=80):
-    img_matches = cv2.drawMatches(
-        img_src, kp_src,
-        img_dst, kp_dst,
-        matches[:n_matches],
-        None,
-        flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
-    )
+def resumen_matches(matches, nombre):
+    distancias = np.array([m.distance for m in matches])
 
-    show_images([img_matches], titles=[titulo], figsize=(18, 8))
+    print(nombre)
+    print(f"Cantidad: {len(matches)}")
+    print(f"Distancia media: {distancias.mean():.2f}")
+    print(f"Distancia mediana: {np.median(distancias):.2f}")
+    print(f"Distancia mínima: {distancias.min():.2f}")
+    print(f"Distancia máxima: {distancias.max():.2f}")
+    print()
