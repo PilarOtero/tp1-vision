@@ -151,6 +151,32 @@ def mostrar_cambios(img2, keypoints2, img1, keypoints1, matches_2_1, inliers_mas
 
 
 def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10)):
+    if isinstance(img, (list, tuple)):
+        imagenes = img
+        titulos = titulo
+        if isinstance(titulos, str):
+            titulos = [titulos] * len(imagenes)
+
+        _, axes = plt.subplots(1, len(imagenes), figsize=figsize)
+        if len(imagenes) == 1:
+            axes = [axes]
+
+        for ax, imagen, titulo_i in zip(axes, imagenes, titulos):
+            img_rgb = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
+            h, w = img_rgb.shape[:2]
+
+            ax.imshow(img_rgb)
+            ax.set_title(titulo_i)
+            ax.set_xticks(np.arange(0, w + 1, paso))
+            ax.set_yticks(np.arange(0, h + 1, paso))
+            ax.grid(color="yellow", linestyle="-", linewidth=0.5, alpha=0.7)
+            ax.set_xlim(0, w)
+            ax.set_ylim(h, 0)
+
+        plt.tight_layout()
+        plt.show()
+        return
+
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     h, w = img_rgb.shape[:2]
 
@@ -168,12 +194,14 @@ def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10)):
     plt.show()
 
 def dlt(ori, dst):
-    # Construir matriz A y vector b
     A = []
     b = []
+
+    # Construimos el sistema de ecuaciones lineales a partir de las correspondencias
     for i in range(4):
         x, y = ori[i]
         x_prima, y_prima = dst[i]
+        # Cada correspondencia genera dos ecuaciones lineales
         A.append([-x, -y, -1, 0, 0, 0, x * x_prima, y * x_prima])
         A.append([0, 0, 0, -x, -y, -1, x * y_prima, y * y_prima])
         b.append(x_prima)
@@ -181,17 +209,11 @@ def dlt(ori, dst):
 
     A = np.array(A)
     b = np.array(b)
-
-    # Resolvemos el sistema de ecuaciones A * h = b
-    # El sistema es de 8x8, por lo que podemos resolverlo si A es inversible
-
-    # Resuelve el sistema de ecuaciones para encontrar los parámetros de H
+    # Resolvemos el sistema de ecuaciones para encontrar los parámetros de H
     H = -np.linalg.solve(A, b)
-
-    # Agrega el elemento h_33
+    # Agregamos el elemento h_33
     H = np.hstack([H, [1]])
 
-    # reorganiza H para formar la matrix en 3x3 to form the 3x3 homography matrix
     H = H.reshape(3, 3)
     return H
 
