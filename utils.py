@@ -290,4 +290,60 @@ def homograficas_a_euclideas(H, puntos):
     puntos_homograficos = np.hstack([puntos, np.ones((len(puntos), 1))])
     transformados = (H @ puntos_homograficos.T).T
 
-    return transformados[:,:2] / transformados[:,2:3]
+    x, y, w = transformados.T
+    return np.stack([x / w, y / w], axis = 1)
+
+def calcular_size_optimo(imagenes, homografias):
+    todas_esquinas = []
+    for img, H in zip(imagenes, homografias):
+        alto, ancho = img.shape[:2]
+        esquinas = np.array([[0,0], [ancho, alto], [0, alto], [ancho, 0]], dtype = np.float64)
+        todas_esquinas.append(homograficas_a_euclideas(H, esquinas))
+
+    todas_esquinas = np.vstack(todas_esquinas)
+    min_xy = np.floor(todas_esquinas.min(axis = 0)).astype(int)
+    max_xy = np.ceil(todas_esquinas.max(axis = 0)).astype(int)
+
+    ancho_, alto = max_xy - min_xy
+
+    # Trasladamos ya que se pueden haber obtenido coordenadas negativas
+    traslacion = np.array([[1, 0, -min_xy[0]],
+                           [0, 1, -min_xy[1]],
+                           [0, 0, 1]], dtype = np.float64)
+
+    homografias_ajustadas = [traslacion @ H for H in homografias]
+    return (int(ancho_), int(alto)), homografias_ajustadas
+
+def warpear(img, H, size_canvas):
+    img_warpeada = cv2.warpPerspective(img, H, size_canvas)
+
+    # Armamos una mascara blanca (255)
+    mascara = np.full(img.shape[:2], 255, dtype = np.uint8)
+    mascara = cv2.warpPerspective(mascara, H, size_canvas, flags = cv2.INTER_NEAREST)
+
+    # Distacia al pixel negro (borde) mas cercano
+    peso = cv2.distanceTransform(mascara, cv2.DIST_L2, 5)
+
+    return img_warpeada, peso
+
+def construir_imagen(imagenes, homografias):
+    size_canvas, homografias_ = calcular_size_optimo(imagenes, homografias)
+    ancho, alto = size_canvas[:2]
+
+    # suma en los 3 canales
+    acumulado = np.zeros((alto, ancho, 3), dtype = np.float64)
+    sumatoria_pesos = np.zeros((alto, ancho), dtype = np.float64)
+
+    for imagen, H in zip(imagenes, homografias_):
+        imagen_warpeada, peso = warpear(imagen, H, size_canvas)
+
+        acumulado += imagen_warpeada.astype(np.float64) * peso[..., None]
+        sumatoria_pesos += peso
+
+    suma_pesos = np.where(sumatoria_pesos == 0, 1, sumatoria_pesos)
+    # Dividimos para obtener colores validos
+    resultado = acumulado / suma_pesos[..., None]
+    resultado[suma_pesos == 0] = 0
+
+    return resultado.astype(np.uint8)
+
