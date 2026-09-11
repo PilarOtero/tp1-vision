@@ -25,7 +25,7 @@ def anms(keypoints, n_deseado):
         for j in range(n):
             if i == j:
                 continue
-            #r_j > r_i
+            
             if respuestas[j] > respuestas[i]:
                 SD = (puntos[j, 0] - puntos[i, 0]) ** 2 + (puntos[j, 1] - puntos[i, 1]) ** 2
                 if SD < R[i]:
@@ -116,37 +116,32 @@ def obtener_matches_combinado(desc_src, desc_dst, ratio = 0.75):
     matches = sorted(matches, key = lambda m: m.distance)
     return matches
 
-def mostrar_cambios(img2, keypoints2, img1, keypoints1, matches_2_1, inliers_mask = None):
+def mostrar_cambios(img2, keypoints2, img1, keypoints1, matches_2_1, inliers_mask = None, titulo = None, figsize = (14, 6)):
     if inliers_mask is None:
-        img_2_1 = cv2.drawMatches(
-            img2, keypoints2,
-            img1, keypoints1,
-            matches_2_1, None,
-            flags = cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
-        )
+        img_2_1 = cv2.drawMatches(img2, keypoints2, img1, keypoints1, matches_2_1, None, flags = cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+        if titulo is not None:
+            plt.figure(figsize=figsize)
+            plt.imshow(cv2.cvtColor(img_2_1, cv2.COLOR_BGR2RGB))
+            plt.title(titulo)
+            plt.axis("off")
+            plt.show()
         return img_2_1
 
     inliers_mask = inliers_mask.astype(int)
     img_2_1 = cv2.drawMatches(img2, [], img1, [], [], None)
 
-    cv2.drawMatches(
-        img2, keypoints2,
-        img1, keypoints1,
-        matches_2_1,
-        outImg = img_2_1,
-        matchesMask = inliers_mask.tolist(),
-        matchColor = (0, 255, 0),
-        flags = cv2.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG
-    )
-    cv2.drawMatches(
-        img2, keypoints2,
-        img1, keypoints1,
-        matches_2_1,
-        outImg = img_2_1,
-        matchesMask = (1 - inliers_mask).tolist(),
-        matchColor = (0, 0, 255),
-        flags=cv2.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG
-    )
+    cv2.drawMatches(img2, keypoints2, img1, keypoints1, matches_2_1, outImg = img_2_1,
+                    matchesMask = inliers_mask.tolist(), matchColor = (0, 255, 0), flags = cv2.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG)
+    cv2.drawMatches(img2, keypoints2, img1, keypoints1, matches_2_1, outImg = img_2_1, matchesMask = (1 - inliers_mask).tolist(),
+    matchColor = (0, 0, 255), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG)
+
+    if titulo is not None:
+        plt.figure(figsize=figsize)
+        plt.imshow(cv2.cvtColor(img_2_1, cv2.COLOR_BGR2RGB))
+        plt.title(titulo)
+        plt.axis("off")
+        plt.show()
+
     return img_2_1
 
 
@@ -346,4 +341,3 @@ def construir_imagen(imagenes, homografias):
     resultado[suma_pesos == 0] = 0
 
     return resultado.astype(np.uint8)
-
