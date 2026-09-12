@@ -144,7 +144,6 @@ def mostrar_cambios(img2, keypoints2, img1, keypoints1, matches_2_1, inliers_mas
 
     return img_2_1
 
-
 def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10)):
     if isinstance(img, (list, tuple)):
         imagenes = img
@@ -318,6 +317,7 @@ def warpear(img, H, size_canvas):
 
     # Distacia al pixel negro (borde) mas cercano
     peso = cv2.distanceTransform(mascara, cv2.DIST_L2, 5)
+    peso = peso ** 4 # Multiplicamos por 2 para que los bordes tengan menos peso y no se vean tan marcados
 
     return img_warpeada, peso
 
