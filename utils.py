@@ -317,7 +317,7 @@ def warpear(img, H, size_canvas):
 
     # Distacia al pixel negro (borde) mas cercano
     peso = cv2.distanceTransform(mascara, cv2.DIST_L2, 5)
-    peso = peso ** 4 # Multiplicamos por 2 para que los bordes tengan menos peso y no se vean tan marcados
+    peso = peso ** 4 # Multiplicamos por 4 para que los bordes tengan menos peso y no se vean tan marcados --> la imahgen final menos borrosa
 
     return img_warpeada, peso
 
