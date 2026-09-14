@@ -17,6 +17,7 @@
 \usepackage{titlesec}
 \usepackage{hyperref}
 \usepackage{amssymb}
+\usepackage{xcolor}
 
 % ==============================
 %   CONFIGURACIONES
@@ -42,11 +43,11 @@
 % ==============================
 \begin{document}
 
-% ==============================
+% ==============================    
 %   PORTADA + RESUMEN MULTIPÁGINA
 % ==============================
 \begin{center}
-    \includegraphics[width=0.35\linewidth]{escudo.jpeg} \\[1cm]
+    \includegraphics[width=0.35\linewidth]{UdeSA.png}\\[1cm]
 
     \textbf{\LARGE Trabajo Práctico 1 - Panoramica:}\\[0.3cm]
 
@@ -62,8 +63,9 @@
 \end{center}
 \vspace{0.1cm}
 \setlength{\parindent}{1.2em}
+\setlength{\parskip}{0.6em}
 \footnotesize
-\being{abstract}
+\begin{abstract}
 %% ACA RESUMENNNN
 \end{abstract}
 
@@ -100,26 +102,54 @@ Las imágenes de cada conjunto se cargaron originalmente a color utilizando el f
 
 Adicionalemnte, para la etapa de detección de características, las imágenes se convirtieron a escala de grises mediante debido a que el algoritmo SIFT (\textit{Scale-Invariant Feature Transform}) trabaja sobre gradientes de intensidad — construye una pirámide de diferencias de Gaussianas sobre una única señal de brillo —. Frente a esta funcionalidad, el color en las imagenes solo encarecería el cómputo al trabjar sobre los canales rojo, verde y azul, en lugar de uno, sin la incorporación de nueva información. 
 
-\textbf{Párrafo 3: Detección y descripción con SIFT.}
-Explicar que se usó SIFT para detectar keypoints y calcular descriptores. Los keypoints representan zonas distintivas de la imagen, como esquinas, bordes o cambios locales de textura. Los descriptores son vectores que resumen la información alrededor de cada keypoint y permiten comparar puntos entre imágenes.
+\textbf{Detección y descripción con SIFT.}
 
-\textbf{Párrafo 4: A-NMS.}
-Explicar que se aplicó Supresión de No-Máxima Adaptativa para quedarse con una cantidad fija de puntos mejor distribuidos en la imagen. Esto evita que todos los keypoints se concentren en una sola zona con mucha textura.
+\textcolor{lightgray}{\textbf{Párrafo 3:}
+Explicar que se usó SIFT para detectar keypoints y calcular descriptores. Los keypoints representan zonas distintivas de la imagen, como esquinas, bordes o cambios locales de textura. Los descriptores son vectores que resumen la información alrededor de cada keypoint y permiten comparar puntos entre imágenes.}
 
-\textbf{Párrafo 5: Matching.}
-Explicar que se compararon los descriptores entre cada imagen lateral y la imagen ancla, es decir, entre las imágenes $0 \rightarrow 1$ y $2 \rightarrow 1$. Describir brevemente los métodos utilizados: cross-check, Lowe Ratio y el criterio combinado. Luego justificar que se eligió el criterio combinado porque prioriza matches más confiables antes de aplicar RANSAC.
+Sobre las imágenes en escala de grises se aplicó el detector SIFT (\texttt{cv2.SIFT\_create}), que identifica puntos distintivos —keypoints— a partir de extremos locales en un espacio de escala construido con diferencias de Gaussianas, y calcula para cada uno un descriptor de 128 valores basado en histogramas de orientación del gradiente alrededor del punto. Esta construcción hace que los descriptores sean robustos frente a cambios moderados de escala, rotación e iluminación entre fotografías, condición necesaria dado que las tres imágenes de cada conjunto fueron tomadas desde ángulos y distancias ligeramente distintos. La cantidad de keypoints detectados varió considerablemente entre conjuntos: en \textit{cuadro} se hallaron entre 450 y 490 keypoints por imagen, mientras que en \textit{UdeSA} se detectaron entre 2756 y 3120, reflejando la mayor cantidad de textura de alta frecuencia presente en la fachada del edificio, los árboles y el pasto frente a las regiones de color más planas del cuadro.
 
-\textbf{Párrafo 6: Homografía manual con DLT.}
-Explicar que se estimó una homografía manual usando cuatro pares de puntos correspondientes. Aclarar que esto se hizo sobre el conjunto del cuadro, donde era más sencillo identificar puntos sobre un mismo plano. Mencionar que DLT calcula una matriz que transforma puntos de una imagen al sistema de coordenadas de la imagen ancla.
+\textbf{A-NMS.}
 
-\textbf{Párrafo 7: RANSAC.}
-Explicar que los matches automáticos pueden incluir errores, por lo que se usó RANSAC para separar inliers y outliers. En cada iteración, RANSAC elige cuatro matches, calcula una homografía con DLT, mide el error de reproyección y cuenta cuántos puntos son consistentes con esa transformación. Finalmente, se conserva la mejor homografía y se recalcula usando todos los inliers.
+\textcolor{lightgray}{\textbf{Párrafo 4:}
+Explicar que se aplicó Supresión de No-Máxima Adaptativa para quedarse con una cantidad fija de puntos mejor distribuidos en la imagen. Esto evita que todos los keypoints se concentren en una sola zona con mucha textura.}
 
-\textbf{Párrafo 8: Warping y panorámica final.}
-Explicar que, con las homografías finales, se transformaron las imágenes laterales para llevarlas al sistema de coordenadas de la imagen ancla. Luego se calculó el tamaño del canvas final para que entren todas las imágenes transformadas. Finalmente, se combinaron las imágenes para obtener la panorámica.
+Con el fin de evitar que los keypoints seleccionados se concentren en las zonas de mayor textura de cada imagen, se aplicó Supresión de No Máxima Adaptativa (A-NMS) sobre los keypoints detectados por SIFT. Para cada punto se calculó un radio de supresión, definido como la distancia al keypoint más cercano cuya respuesta fuera mayor, de modo que los puntos con mayor radio corresponden a máximos locales dominantes dentro de una región amplia de la imagen. Ordenando los keypoints por este radio de forma descendente, se conservó una cantidad fija $N$ para cada imagen: 200 para el conjunto \textit{cuadro} y 500 para \textit{UdeSA}, valores elegidos en función de la cantidad inicial de keypoints detectados en cada caso. Como resultado, los puntos retenidos quedan mejor distribuidos espacialmente en toda la imagen, lo cual resulta conveniente tanto para la calidad de la homografía estimada posteriormente como para acotar el costo computacional de las etapas de matching y RANSAC.
 
-\textbf{Párrafo 9: Imágenes y tamaño.}
-Aclarar que las imágenes fueron reducidas cuando fue necesario para que el procesamiento fuera más eficiente y para cumplir con el tamaño recomendado por la consigna.
+\textbf{Matching.}
+
+\textcolor{lightgray}{\textbf{Párrafo 5:}
+Explicar que se compararon los descriptores entre cada imagen lateral y la imagen ancla, es decir, entre las imágenes $0 \rightarrow 1$ y $2 \rightarrow 1$. Describir brevemente los métodos utilizados: cross-check, Lowe Ratio y el criterio combinado. Luego justificar que se eligió el criterio combinado porque prioriza matches más confiables antes de aplicar RANSAC.}
+
+Para relacionar los keypoints entre cada imagen lateral (0 y 2) y la imagen ancla (1) se evaluaron tres estrategias de matching sobre los descriptores SIFT, usando en todos los casos distancia euclídea ($L2$) por tratarse de descriptores de punto flotante. La estrategia de \textit{cross-check} exige que dos keypoints sean mutuamente su mejor vecino en ambas direcciones, y fue la que generó más correspondencias (84 y 74 para \textit{cuadro} $0\to1$ y $2\to1$; 186 y 168 para \textit{UdeSA}). El \textit{Lowe ratio} (umbral $=0.75$), en cambio, descarta matches ambiguos comparando la distancia al primer y al segundo vecino más cercano, y produjo un conjunto más chico (52 y 34 para \textit{cuadro}; 114 y 46 para \textit{UdeSA}). Finalmente, se implementó un criterio combinado que exige simultáneamente que el match supere el ratio de Lowe en ambas direcciones y que sea consistente bajo cross-check, obteniendo el conjunto más reducido pero también el de menor distancia media entre descriptores (40 y 16 correspondencias para \textit{cuadro}; 93 y 32 para \textit{UdeSA}). Se optó por este último criterio para las etapas siguientes, priorizando la confiabilidad de las correspondencias por sobre la cantidad, dado que RANSAC requiere partir de un conjunto de matches con la menor proporción posible de outliers para converger a una buena homografía.
+
+\textbf{Homografía manual con DLT.}
+
+\textcolor{lightgray}{\textbf{Párrafo 6:}
+Explicar que se estimó una homografía manual usando cuatro pares de puntos correspondientes. Aclarar que esto se hizo sobre el conjunto del cuadro, donde era más sencillo identificar puntos sobre un mismo plano. Mencionar que DLT calcula una matriz que transforma puntos de una imagen al sistema de coordenadas de la imagen ancla.}
+
+Como complemento al método automático, se implementó el algoritmo DLT (\textit{Direct Linear Transformation}) sin utilizar OpenCV, para estimar una homografía a partir de exactamente cuatro correspondencias elegidas manualmente con ayuda de una grilla de referencia. Este procedimiento se aplicó sobre el conjunto \textit{cuadro}, donde la textura rica de la pintura permite identificar con precisión puntos físicos equivalentes en ambas imágenes (esquinas de figuras, extremos de trazos), repitiéndolo para los pares $0\to1$ y $2\to1$. Al elegir los puntos se evitó que quedaran alineados entre sí y se buscó que estuvieran razonablemente distribuidos dentro de la zona de solapamiento, para que el sistema lineal resultante no quedara mal condicionado. Ambas homografías reproyectan los cuatro puntos utilizados con error nulo (0.0000 px), lo cual es esperable dado que el sistema queda exactamente determinado por esos mismos cuatro pares y no constituye una medida de calidad sobre el resto de la imagen; por eso, además, se validó cada homografía aplicándola con \texttt{cv2.warpPerspective} sobre la imagen completa, verificando visualmente que la región del cuadro quedara alineada con la imagen ancla.
+
+\textbf{RANSAC.}
+
+\textcolor{lightgray}{\textbf{Párrafo 7:}
+Explicar que los matches automáticos pueden incluir errores, por lo que se usó RANSAC para separar inliers y outliers. En cada iteración, RANSAC elige cuatro matches, calcula una homografía con DLT, mide el error de reproyección y cuenta cuántos puntos son consistentes con esa transformación. Finalmente, se conserva la mejor homografía y se recalcula usando todos los inliers.}
+
+Como los matches obtenidos con el criterio combinado todavía pueden incluir correspondencias incorrectas, se implementó RANSAC sin utilizar OpenCV para estimar cada homografía de forma robusta. En cada una de las $T=2000$ iteraciones se seleccionaron cuatro correspondencias al azar, se calculó una homografía candidata con DLT, y se contó cuántas de todas las correspondencias disponibles resultaban \textit{inliers} —con un error de reproyección menor a 5 píxeles—, conservando la iteración que maximizó esa cantidad. La homografía definitiva se recalculó luego por mínimos cuadrados (SVD) usando únicamente el conjunto de inliers ganador, en lugar de los cuatro puntos originales, para aprovechar toda la evidencia disponible en vez de depender de una muestra mínima. Los resultados variaron entre pares de imágenes: en \textit{cuadro} se obtuvo 77.5\% de inliers (31/40) con error de reproyección de 1.944 px para $0\to1$, y 50\% de inliers (8/16) con error de 0.934 px para $2\to1$; en \textit{UdeSA} las proporciones de inliers fueron notablemente mayores, 96.8\% (90/93, error 0.980 px) y 78.1\% (25/32, error 1.424 px) respectivamente. La mayor proporción de outliers observada en \textit{cuadro} $2\to1$ es consistente con la menor cantidad de correspondencias combinadas disponibles en ese par (apenas 16), donde un puñado de matches erróneos pesa proporcionalmente más sobre el resultado.
+
+\textbf{Warping, tamaño de canvas y panorámica final.}
+
+\textcolor{lightgray}{\textbf{Párrafo 8:}
+Explicar que, con las homografías finales, se transformaron las imágenes laterales para llevarlas al sistema de coordenadas de la imagen ancla. Luego se calculó el tamaño del canvas final para que entren todas las imágenes transformadas. Finalmente, se combinaron las imágenes para obtener la panorámica.}
+
+Con las homografías finales de RANSAC, se calculó primero el tamaño óptimo del canvas donde se construiría cada panorámica: se transformaron las cuatro esquinas de cada imagen (ancla incluida) con su homografía correspondiente, y se tomaron los valores mínimos y máximos de esas coordenadas proyectadas para definir el ancho y alto necesarios. Como estas coordenadas pueden resultar negativas, se agregó una traslación a cada homografía de forma que todo el contenido quede dentro del canvas. Sobre ese canvas, cada imagen se transformó con \texttt{cv2.warpPerspective} usando su homografía ya ajustada, y en simultáneo se generó una máscara de peso a partir de \texttt{cv2.distanceTransform}, que asigna a cada píxel un valor proporcional a su distancia al borde más cercano de la imagen warpeada (elevado a la cuarta potencia, para que el peso decaiga más rápido cerca de los bordes y las costuras queden menos marcadas). El panorama final se obtuvo como un promedio ponderado píxel a píxel entre las imágenes superpuestas, usando esas máscaras como pesos $W_i$ según $I = \sum_i W_i I_i / \sum_i W_i$, de modo que las zonas centrales de cada imagen —más confiables— predominan sobre sus bordes en las regiones de solapamiento.
+
+\textbf{Tamaño y formato de las imágenes.}
+
+\textcolor{lightgray}{\textbf{Párrafo 9:}
+Aclarar que las imágenes fueron reducidas cuando fue necesario para que el procesamiento fuera más eficiente y para cumplir con el tamaño recomendado por la consigna.}
+
+Tanto las imágenes de entrada como las panorámicas resultantes se guardaron en formato \texttt{.jpg}. Las imágenes de entrada se redujeron a 1000 píxeles en su lado mayor antes de procesarlas (Sección \textit{Carga y preprocesamiento}), y las panorámicas finales se exportaron con calidad JPEG 90, cumpliendo con el límite de tamaño por archivo sugerido en la consigna sin introducir artefactos de compresión perceptibles.
 
 \section{Resultados}
 \end{document}
