@@ -1,0 +1,125 @@
+\documentclass[a4paper,12pt]{article}
+
+% ==============================
+%   PAQUETES BÁSICOS
+% ==============================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{minted}
+\usepackage{multicol}
+\usepackage[a4paper, top=3cm, bottom=1.9cm, left=3cm, right=3cm]{geometry}
+\usepackage[font=footnotesize,labelfont=bf]{caption}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{amssymb}
+
+% ==============================
+%   CONFIGURACIONES
+% ==============================
+\hypersetup{
+    colorlinks=false,
+    %linkcolor=blue!60!black,
+    %urlcolor=blue!50!black,
+    %citecolor=blue!50!black,
+    pdfborder={0 0 0},
+    pdftitle={Trabajo Practico 1: Diaco, Pizarro Dal Maso, Otero},
+    pdfauthor={Abril Diaco, Federico Pizarro Dal Maso, Pilar Otero}
+}
+
+\titleformat{\subsection}
+  {\fontsize{12}{15}\selectfont\bfseries}
+  {\thesubsection}{1em}{}
+
+\date{}
+
+% ==============================
+%   DOCUMENTO
+% ==============================
+\begin{document}
+
+% ==============================
+%   PORTADA + RESUMEN MULTIPÁGINA
+% ==============================
+\begin{center}
+    \includegraphics[width=0.35\linewidth]{escudo.jpeg} \\[1cm]
+
+    \textbf{\LARGE Trabajo Práctico 1 - Panoramica:}\\[0.3cm]
+
+    \Large I308 - Vision Artificial \\[1cm]
+
+    \normalsize
+    \textbf{}Abril Diaco, Pilar Otero, Federico Pizarro Dal Maso \\[0.5cm]
+    Nros. de legajo: 36763, 36584, 36389,  \\
+    \href{mailto:adiaco@udesa.edu.ar}{adiaco@udesa.edu.ar}, \href{mailto:potero@udesa.edu.ar}{potero@udesa.edu.ar}, \href{mailto:fpizarrodalmaso@udesa.edu.ar}{fpizarrodalmaso@udesa.edu.ar}
+     \\[0.8cm]
+
+    Segundo semestre 2026 \\[1.2cm]
+\end{center}
+\vspace{0.1cm}
+\setlength{\parindent}{1.2em}
+\footnotesize
+\being{abstract}
+%% ACA RESUMENNNN
+\end{abstract}
+
+\normalsize
+
+\newpage
+
+\section{Introducción}
+La pregunta motivadora de este trabajo ronda en torno a cómo se puede reconocer una misma escena u objeto visto desde distintos ángulos para luego usar esa información para construir una imagen más amplia. En esta práctica, se busca experimentar dicho problema, construyendo una panorámica a partir de tres imágenes con zonas en común. Para unirlas, se uso la imagen central como ancla y se transformaron las otras imágenes para alinearlas con ella.
+
+La herramienta geométrica principal que usamos para hacer esta alineación es la homografía. Una homografía se define como una transformación proyectiva entre dos planos. En este contexto, nos permite relacionar puntos de una imagen con sus puntos correspondientes en otra. Esta transformación se representa con una matriz $H$ de tamaño $3 \times 3$ y se aplica sobre puntos escritos en coordenadas homogéneas:
+\[
+\tilde{x}' \sim H \tilde{x}.
+\]
+Aunque la matriz tiene nueve valores, multiplicarla completa por una constante no cambia la transformación que representa. Por eso, en la práctica hay ocho valores independientes que determinar. Como cada par de puntos correspondientes aporta dos ecuaciones, se necesitan al menos cuatro pares de puntos para calcular una homografía.
+
+Las homografías son útiles para hacer \textit{stitching} porque permiten llevar puntos de distintas imágenes a un mismo sistema de coordenadas. Si logramos estimar la homografía que relaciona cada imagen lateral con la imagen ancla, podemos transformar las imágenes para que sus zonas en común se superpongan y formen una imagen más amplia.
+
+Para que esto funcione bien, se necesitan ciertas condiciones. La homografía describe correctamente la relación entre dos imágenes cuando la escena es plana, cuando los objetos están lo suficientemente lejos de la cámara, o cuando la cámara rota aproximadamente desde un mismo centro de proyección. Bajo estas hipótesis, una única transformación puede explicar la relación geométrica entre ambas imágenes. En cambio, si estas condiciones no se cumplen, pueden aparecer deformaciones, bordes desalineados o regiones mal superpuestas.
+
+En las imágenes provistas por la cátedra, estas condiciones se cumplen en algunas partes. En el conjunto del cuadro hay un plano principal muy claro: el mismo cuadro. Por eso, esperamos que la homografía funcione mejor en esa zona. Sin embargo, otros elementos, como la mesa, están en otros planos, por lo que pueden quedar desalineados.
+
+En el conjunto de UdeSA también hay una estructura principal, que es el edificio. De todos modos, la escena tiene más elementos y más profundidad, como árboles, pasto y objetos del fondo. Por eso, una sola homografía puede no alcanzar para alinear toda la imagen, y es posible que este conjunto presente más errores.
+
+Para construir la panorámica, entonces,  organizamos el trabajo en varias etapas. Primero detectamos puntos característicos con SIFT y luego aplicamos A-NMS para quedarnos con puntos mejor distribuidos en la imagen. Después comparamos distintas formas de hacer matching, como \texttt{cross-check}, \texttt{Lowe Ratio} y un criterio combinado. Con esas correspondencias, estimamos homografías: primero de forma manual usando DLT y luego de forma automática con RANSAC para descartar outliers. Finalmente, usamos las homografías obtenidas para transformar las imágenes y componer la panorámica final.
+
+\section{Método}
+
+\subsection*{Organización general}
+El método sigue un pipeline de procesamiento compuesto por varias etapas secuenciales: a partir de las imágenes de entrada se detectan sus \textbf{puntos característicos} y su \textbf{descripción}, seguido de la aplicación de la \textbf{Supresión de No Máxima Adaptativa} con el objetivo de quedarse unicamente con un subconjunto de puntos bien distribuidos espacialmente. Luego, para cada par de imágenes (imagen lateral, imagen ancla), se repiten las etapas de \textbf{asociación de correspondencias}, \textbf{eliminación de outliers mediante RANSAC} y \textbf{estimación de la homografía}, hasta finalmente \textbf{juntar y mezclar las imágenes} en un único sistema de coordenadas, resultando en la panorámica final. En ambos conjuntos de datos (\textit{cuadro} y \textit{UdeSA}) se utilizó la imagen central (imagen 1) como ancla, dado que es la única que comparte zonas de solapamiento con las dos imágenes restantes, evitando así tener que estimar una correspondencia directa entre las imágenes 0 y 2.
+
+\subsection*{Carga y preprocesamiento}
+Las imágenes de cada conjunto se cargaron originalmente a color utilizando el formato BGR, y se redujeron de tamaño a 1000 píxeles mediante la función \texttt{achicar}, dado que las fotografías originales alcanzaban resoluciones de hasta $3072\times4096$ píxeles. Esta reducción posibilita que el procesamiento posterior sea considerablemente más liviano, evitando simultaneamente la perdida de información relevante para el problema.
+
+Adicionalemnte, para la etapa de detección de características, las imágenes se convirtieron a escala de grises mediante debido a que el algoritmo SIFT (\textit{Scale-Invariant Feature Transform}) trabaja sobre gradientes de intensidad — construye una pirámide de diferencias de Gaussianas sobre una única señal de brillo —. Frente a esta funcionalidad, el color en las imagenes solo encarecería el cómputo al trabjar sobre los canales rojo, verde y azul, en lugar de uno, sin la incorporación de nueva información. 
+
+\textbf{Párrafo 3: Detección y descripción con SIFT.}
+Explicar que se usó SIFT para detectar keypoints y calcular descriptores. Los keypoints representan zonas distintivas de la imagen, como esquinas, bordes o cambios locales de textura. Los descriptores son vectores que resumen la información alrededor de cada keypoint y permiten comparar puntos entre imágenes.
+
+\textbf{Párrafo 4: A-NMS.}
+Explicar que se aplicó Supresión de No-Máxima Adaptativa para quedarse con una cantidad fija de puntos mejor distribuidos en la imagen. Esto evita que todos los keypoints se concentren en una sola zona con mucha textura.
+
+\textbf{Párrafo 5: Matching.}
+Explicar que se compararon los descriptores entre cada imagen lateral y la imagen ancla, es decir, entre las imágenes $0 \rightarrow 1$ y $2 \rightarrow 1$. Describir brevemente los métodos utilizados: cross-check, Lowe Ratio y el criterio combinado. Luego justificar que se eligió el criterio combinado porque prioriza matches más confiables antes de aplicar RANSAC.
+
+\textbf{Párrafo 6: Homografía manual con DLT.}
+Explicar que se estimó una homografía manual usando cuatro pares de puntos correspondientes. Aclarar que esto se hizo sobre el conjunto del cuadro, donde era más sencillo identificar puntos sobre un mismo plano. Mencionar que DLT calcula una matriz que transforma puntos de una imagen al sistema de coordenadas de la imagen ancla.
+
+\textbf{Párrafo 7: RANSAC.}
+Explicar que los matches automáticos pueden incluir errores, por lo que se usó RANSAC para separar inliers y outliers. En cada iteración, RANSAC elige cuatro matches, calcula una homografía con DLT, mide el error de reproyección y cuenta cuántos puntos son consistentes con esa transformación. Finalmente, se conserva la mejor homografía y se recalcula usando todos los inliers.
+
+\textbf{Párrafo 8: Warping y panorámica final.}
+Explicar que, con las homografías finales, se transformaron las imágenes laterales para llevarlas al sistema de coordenadas de la imagen ancla. Luego se calculó el tamaño del canvas final para que entren todas las imágenes transformadas. Finalmente, se combinaron las imágenes para obtener la panorámica.
+
+\textbf{Párrafo 9: Imágenes y tamaño.}
+Aclarar que las imágenes fueron reducidas cuando fue necesario para que el procesamiento fuera más eficiente y para cumplir con el tamaño recomendado por la consigna.
+
+\section{Resultados}
+\end{document}
