@@ -4,11 +4,23 @@ import matplotlib.pyplot as plt
 
 def achicar(img, max_dim = 1000):
     altura, ancho = img.shape[:2]
-    escala = max_dim / max(altura, ancho)    
+    escala = max_dim / max(altura, ancho)
     # Si la imagen ya es mas chica que max_dim, no hacemos nada
     if escala < 1:
         img = cv2.resize(img, (int(ancho * escala), int(altura * escala)), interpolation=cv2.INTER_AREA)
     return img
+
+def factor_escala(img, max_dim = 1000):
+    altura, ancho = img.shape[:2]
+    return min(1.0, max_dim / max(altura, ancho))
+
+def escalar_homografia(H, s_src, s_dst):
+    # Las homografias fueron estimadas sobre imagenes achicadas por s_src y s_dst.
+    # Para aplicarlas sobre las imagenes originales hay que deshacer ese escalado:
+    # x_full = S_dst^-1 @ H_scaled @ S_src @ x_full, con S = diag(s, s, 1)
+    S_src = np.diag([s_src, s_src, 1.0])
+    S_dst = np.diag([s_dst, s_dst, 1.0])
+    return np.linalg.inv(S_dst) @ H @ S_src
 
 def anms(keypoints, n_deseado):
     n = len(keypoints)
@@ -144,18 +156,34 @@ def mostrar_cambios(img2, keypoints2, img1, keypoints1, matches_2_1, inliers_mas
 
     return img_2_1
 
-def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10)):
+def _dibujar_grupos_puntos(ax, grupos):
+    # grupos: lista de dicts {"puntos": Nx2, "color": str, "label": str opcional}
+    if not grupos:
+        return
+    for grupo in grupos:
+        puntos = np.asarray(grupo["puntos"])
+        color = grupo.get("color", "red")
+        label = grupo.get("label")
+        marker = grupo.get("marker", "o")
+        ax.scatter(puntos[:, 0], puntos[:, 1], c=color, marker=marker, s=60,
+                   edgecolors="black", linewidths=0.8, label=label, zorder=5)
+    if any(g.get("label") for g in grupos):
+        ax.legend(loc="upper right", fontsize=8)
+
+def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10), puntos = None):
     if isinstance(img, (list, tuple)):
         imagenes = img
         titulos = titulo
         if isinstance(titulos, str):
             titulos = [titulos] * len(imagenes)
 
+        puntos_por_imagen = puntos if puntos is not None else [None] * len(imagenes)
+
         _, axes = plt.subplots(1, len(imagenes), figsize=figsize)
         if len(imagenes) == 1:
             axes = [axes]
 
-        for ax, imagen, titulo_i in zip(axes, imagenes, titulos):
+        for ax, imagen, titulo_i, grupos in zip(axes, imagenes, titulos, puntos_por_imagen):
             img_rgb = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
             h, w = img_rgb.shape[:2]
 
@@ -166,6 +194,8 @@ def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10)):
             ax.grid(color="yellow", linestyle="-", linewidth=0.5, alpha=0.7)
             ax.set_xlim(0, w)
             ax.set_ylim(h, 0)
+
+            _dibujar_grupos_puntos(ax, grupos)
 
         plt.tight_layout()
         plt.show()
@@ -184,6 +214,8 @@ def mostrar_imagen_con_grilla(img, titulo = "", paso = 50, figsize = (12, 10)):
 
     ax.set_xlim(0, w)
     ax.set_ylim(h, 0)
+
+    _dibujar_grupos_puntos(ax, puntos)
 
     plt.show()
 
@@ -341,3 +373,13 @@ def construir_imagen(imagenes, homografias):
     resultado[suma_pesos == 0] = 0
 
     return resultado.astype(np.uint8)
+
+def superponer_imagenes(base, transformada, alpha = 0.5):
+    # Mezcla la imagen transformada sobre la base, pero solo donde hay contenido
+    # valido (evita oscurecer con negro las zonas que el warp no cubre).
+    mascara = transformada.sum(axis = 2) > 0
+    mezcla = cv2.addWeighted(base, 1 - alpha, transformada, alpha, 0)
+
+    resultado = base.copy()
+    resultado[mascara] = mezcla[mascara]
+    return resultado

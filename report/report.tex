@@ -1,4 +1,4 @@
-\documentclass[a4paper,12pt]{article}
+\documentclass[a4paper,11pt]{article}
 
 % ==============================
 %   PAQUETES BÁSICOS
@@ -9,10 +9,14 @@
 \usepackage{lmodern}
 \usepackage{graphicx}
 \usepackage{float}
+\setlength{\textfloatsep}{6pt}
+\setlength{\intextsep}{4pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
 \usepackage{amsmath}
 \usepackage{minted}
 \usepackage{multicol}
-\usepackage[a4paper, top=3cm, bottom=1.9cm, left=3cm, right=3cm]{geometry}
+\usepackage[a4paper, top=2cm, bottom=2cm, left=2.2cm, right=2.2cm]{geometry}
 \usepackage[font=footnotesize,labelfont=bf]{caption}
 \usepackage{titlesec}
 \usepackage{hyperref}
@@ -51,7 +55,7 @@
 
     \textbf{\LARGE Trabajo Práctico 1 - Panoramica:}\\[0.3cm]
 
-    \Large I308 - Vision Artificial \\[1cm]
+    \Large I308 - Visión Artificial \\[1cm]
 
     \normalsize
     \textbf{}Abril Diaco, Pilar Otero, Federico Pizarro Dal Maso \\[0.5cm]
@@ -66,7 +70,7 @@
 \setlength{\parskip}{0.6em}
 \footnotesize
 \begin{abstract}
-%% ACA RESUMENNNN
+El objetivo de esta práctica consiste en el análisis de imagenes y el reconocimiento de sus puntos principales, con la finalidad de desarrollar los algoritmos necesarios para la simulación de una imagen panorámica, construida a partir de las fotografías iniciales. Siguiendo esta línea, dados dos conjuntos de 3 imagenes provistos por la cátedra, uno de un cuadro y otro del Campus de la Universidad de San Andrés, se llevó a cabo un trabajo en el que, con las imagenes reducidas a un máximo de mil pixeles, se buscaron los denominados \textit{keypoints} o puntos principales mediante el método SIFT y se disminuyó su cantidad mediante el algoritmo de Supresión No-Máxima Adaptativa. A continuación, se seleccionó la imagen central como ancla, seleccionada especialmente para reducir la cantidad de transformaciones a realizar. A partir de esto, se llevó a cabo la asociación de características entre cada una de las imagenes extremo con el ancla. Para ello, se implementaron dos tipos de estrategias: \textit{Cross-Check} y \textit{FLANN + Lowe Ratio}, aunque, el análisis de sus resultados llevó a la prueba de un tercer algoritmo combinado, el cual fue seleccionado para ambos conjuntos, como el modelo final al buscarse matches mas confiables, siendo estos un total de 56 y 125 para cada conjunto respectivamente, y presentar las menores distancias entre imagenes. Los resultados de la aplicación de RANSAC para la eliminación de los outliers y la estimación de las homografias dejaron en evidencia el poder de lo implementado, obteniendose inliers que superan el 50\% del total para el caso del cuadro, y de mas del 77\% para las imagenes del Campus. A partir de los resultados obtenidos, fue posible completar el trabajo, juntando y mezclando las imagenes mediante \textit{Stitching} y \textit{Blending}, construyendo así, la panorámica final.
 \end{abstract}
 
 \normalsize
@@ -74,82 +78,136 @@
 \newpage
 
 \section{Introducción}
-La pregunta motivadora de este trabajo ronda en torno a cómo se puede reconocer una misma escena u objeto visto desde distintos ángulos para luego usar esa información para construir una imagen más amplia. En esta práctica, se busca experimentar dicho problema, construyendo una panorámica a partir de tres imágenes con zonas en común. Para unirlas, se uso la imagen central como ancla y se transformaron las otras imágenes para alinearlas con ella.
+La pregunta motivadora de este trabajo ronda en torno a cómo se puede reconocer una misma escena u objeto visto desde distintos ángulos para luego usar esa información para construir una imagen más amplia. En esta práctica, se busca experimentar dicho problema, construyendo una panorámica a partir de tres imagenes con zonas en común. Para unirlas, se usó la imagen central como ancla y se transformaron las otras imagenes para alinearlas con ella.
 
-La herramienta geométrica principal que usamos para hacer esta alineación es la homografía. Una homografía se define como una transformación proyectiva entre dos planos. En este contexto, nos permite relacionar puntos de una imagen con sus puntos correspondientes en otra. Esta transformación se representa con una matriz $H$ de tamaño $3 \times 3$ y se aplica sobre puntos escritos en coordenadas homogéneas:
+La herramienta geométrica principal que se usó para hacer esta alineación es la denominada homografía, la cual se define como una transformación proyectiva entre dos planos: en lenguaje coloquial, permite relacionar puntos de una imagen con sus puntos correspondientes en otra. Esta transformación se representa con una matriz $H$ de tamaño $3 \times 3$ y se aplica sobre puntos escritos en coordenadas homogéneas:
 \[
 \tilde{x}' \sim H \tilde{x}.
 \]
-Aunque la matriz tiene nueve valores, multiplicarla completa por una constante no cambia la transformación que representa. Por eso, en la práctica hay ocho valores independientes que determinar. Como cada par de puntos correspondientes aporta dos ecuaciones, se necesitan al menos cuatro pares de puntos para calcular una homografía.
+Aunque la matriz tiene nueve valores, en la práctica hay ocho valores independientes que determinar, ya que al multiplicarla por una constante no cambia la transformación que representa, por lo tanto la dividimos por el valor del noveno valor. Como cada par de puntos correspondientes aporta dos ecuaciones, se necesitan al menos cuatro pares de puntos para calcular una homografía.
 
-Las homografías son útiles para hacer \textit{stitching} porque permiten llevar puntos de distintas imágenes a un mismo sistema de coordenadas. Si logramos estimar la homografía que relaciona cada imagen lateral con la imagen ancla, podemos transformar las imágenes para que sus zonas en común se superpongan y formen una imagen más amplia.
+Las homografías son útiles para hacer \textit{stitching} dado que permiten llevar puntos de distintas imagenes a un mismo sistema de coordenadas. Si logramos estimar la homografía $H$ que relaciona cada imagen lateral con la imagen ancla, podemos transformar las imagenes para que sus zonas en común se superpongan y formen una imagen más amplia, construyendo lo que se conoce como \textit{panorámica}.
 
-Para que esto funcione bien, se necesitan ciertas condiciones. La homografía describe correctamente la relación entre dos imágenes cuando la escena es plana, cuando los objetos están lo suficientemente lejos de la cámara, o cuando la cámara rota aproximadamente desde un mismo centro de proyección. Bajo estas hipótesis, una única transformación puede explicar la relación geométrica entre ambas imágenes. En cambio, si estas condiciones no se cumplen, pueden aparecer deformaciones, bordes desalineados o regiones mal superpuestas.
+Para que esto funcione correctamente, se requieren las siguientes condiciones: la escena descripta por las imagenes a considerar debe ser plana, los objetos deben estar lo suficientemente lejos de la cámara y la cámara, al rotar, debe hacerlo aproximadamente desde un mismo centro de proyección. Bajo estas hipótesis, una \textbf{única} transformación puede explicar la relación geométrica entre ambas fotografías. En cambio, si estas condiciones no se cumplen, pueden aparecer deformaciones, bordes desalineados o regiones mal superpuestas.
 
-En las imágenes provistas por la cátedra, estas condiciones se cumplen en algunas partes. En el conjunto del cuadro hay un plano principal muy claro: el mismo cuadro. Por eso, esperamos que la homografía funcione mejor en esa zona. Sin embargo, otros elementos, como la mesa, están en otros planos, por lo que pueden quedar desalineados.
+En las imagenes provistas por la cátedra, estas condiciones no se cumplen en su totalidad, sino en algunas partes. En el conjunto del cuadro hay un plano principal muy claro: el mismo cuadro. Por eso, se espera que la homografía funcione mejor en esa zona. Sin embargo, otros elementos, como la mesa, están en planos y ángulos distintos, por lo que es esperable que no queden perfectamente alineados.
 
-En el conjunto de UdeSA también hay una estructura principal, que es el edificio. De todos modos, la escena tiene más elementos y más profundidad, como árboles, pasto y objetos del fondo. Por eso, una sola homografía puede no alcanzar para alinear toda la imagen, y es posible que este conjunto presente más errores.
+En el conjunto de imagenes del Campus de UdeSA, también se puede observar una estructura principal: el edificio. Si bien la escena presenta diversos elementos  secundarios, como árboles, pasto y objetos del fondo, y profundidad; estos, gracias a la distancia desde la que fueron tomadas las fotografías terminan conformando el mismo plano, no dejando a simple vista las anomalías resultantes de la superposición.
 
-Para construir la panorámica, entonces,  organizamos el trabajo en varias etapas. Primero detectamos puntos característicos con SIFT y luego aplicamos A-NMS para quedarnos con puntos mejor distribuidos en la imagen. Después comparamos distintas formas de hacer matching, como \texttt{cross-check}, \texttt{Lowe Ratio} y un criterio combinado. Con esas correspondencias, estimamos homografías: primero de forma manual usando DLT y luego de forma automática con RANSAC para descartar outliers. Finalmente, usamos las homografías obtenidas para transformar las imágenes y componer la panorámica final.
+\newpage
 
 \section{Método}
-
 \subsection*{Organización general}
-El método sigue un pipeline de procesamiento compuesto por varias etapas secuenciales: a partir de las imágenes de entrada se detectan sus \textbf{puntos característicos} y su \textbf{descripción}, seguido de la aplicación de la \textbf{Supresión de No Máxima Adaptativa} con el objetivo de quedarse unicamente con un subconjunto de puntos bien distribuidos espacialmente. Luego, para cada par de imágenes (imagen lateral, imagen ancla), se repiten las etapas de \textbf{asociación de correspondencias}, \textbf{eliminación de outliers mediante RANSAC} y \textbf{estimación de la homografía}, hasta finalmente \textbf{juntar y mezclar las imágenes} en un único sistema de coordenadas, resultando en la panorámica final. En ambos conjuntos de datos (\textit{cuadro} y \textit{UdeSA}) se utilizó la imagen central (imagen 1) como ancla, dado que es la única que comparte zonas de solapamiento con las dos imágenes restantes, evitando así tener que estimar una correspondencia directa entre las imágenes 0 y 2.
+El método sigue un pipeline de procesamiento compuesto por varias etapas: a partir de las imagenes de entrada se detectan sus \textbf{puntos característicos} y su \textbf{descripción} a partir del algoritmo de SIFT (Scale-Invariant Feature Transform), seguido de la aplicación de la \textbf{Supresión de No Máxima Adaptativa} con el objetivo de quedarse únicamente con un subconjunto de los keypoints mejor distribuidos espacialmente. Luego, para cada par de imagenes (imagen lateral, imagen ancla), se repiten las etapas de \textbf{asociación de correspondencias} (implementando los algoritmos de \textit{cross-check}, \textit{Lowe Ratio} y un criterio combinado de ambos), \textbf{eliminación de outliers} mediante RANSAC (\textit{RANdom SAmple Consensus}) para la detección de outliers y la \textbf{estimación de la homografía}, hasta finalmente \textbf{juntar y mezclar las imagenes} mediante \textit{Stitching} y \textit{Blending} en un único sistema de coordenadas, resultando en la panorámica final. En ambos conjuntos de datos (\textit{cuadro} y \textit{UdeSA}) se utilizó la imagen central (imagen 1) como ancla, dado que es la única que comparte zonas de solapamiento con las dos imagenes restantes, evitando así la necesidad de estimar una correspondencia directa entre las imagenes 0 y 2.
 
 \subsection*{Carga y preprocesamiento}
-Las imágenes de cada conjunto se cargaron originalmente a color utilizando el formato BGR, y se redujeron de tamaño a 1000 píxeles mediante la función \texttt{achicar}, dado que las fotografías originales alcanzaban resoluciones de hasta $3072\times4096$ píxeles. Esta reducción posibilita que el procesamiento posterior sea considerablemente más liviano, evitando simultaneamente la perdida de información relevante para el problema.
+Las imagenes de cada conjunto se cargaron originalmente a color utilizando el formato BGR, y se redujeron de tamaño a 1000 píxeles mediante la función \texttt{achicar}, dado que las fotografías originales alcanzaban resoluciones de hasta $3072\times4096$ píxeles. Esta reducción posibilita que el procesamiento posterior sea considerablemente más liviano, evitando simultaneamente la pérdida de información relevante para el problema.
 
-Adicionalemnte, para la etapa de detección de características, las imágenes se convirtieron a escala de grises mediante debido a que el algoritmo SIFT (\textit{Scale-Invariant Feature Transform}) trabaja sobre gradientes de intensidad — construye una pirámide de diferencias de Gaussianas sobre una única señal de brillo —. Frente a esta funcionalidad, el color en las imagenes solo encarecería el cómputo al trabjar sobre los canales rojo, verde y azul, en lugar de uno, sin la incorporación de nueva información. 
+Adicionalemnte, para la etapa de detección de características, las imagenes se convirtieron a escala de grises debido a que el algoritmo SIFT (\textit{Scale-Invariant Feature Transform}) trabaja sobre gradientes de intensidad, construyendo una pirámide de diferencias de Gaussianas sobre una única señal de brillo. Frente a esta funcionalidad, el color en las imagenes solo encarecería el cómputo al trabjar sobre los canales rojo, verde y azul, en lugar de uno, sin la incorporación de nueva información. 
 
 \textbf{Detección y descripción con SIFT.}
+Sobre las imagenes en escala de grises se aplicó el detector SIFT (\texttt{cv2.SIFT\_create}), que identifica puntos distintivos o keypoints a partir de extremos locales en un espacio de escala construido con diferencias de Gaussianas, y calcula para cada uno, un descriptor de 128 valores basado en histogramas de orientación del gradiente alrededor del punto. Esta construcción hace que los descriptores sean robustos frente a cambios moderados de escala, rotación e iluminación entre fotografías, condición necesaria dado que las tres imagenes de cada conjunto fueron tomadas desde ángulos y distancias ligeramente distintos.
 
-\textcolor{lightgray}{\textbf{Párrafo 3:}
-Explicar que se usó SIFT para detectar keypoints y calcular descriptores. Los keypoints representan zonas distintivas de la imagen, como esquinas, bordes o cambios locales de textura. Los descriptores son vectores que resumen la información alrededor de cada keypoint y permiten comparar puntos entre imágenes.}
+\textbf{Supresión de No-Máxima Adaptativa (A-NMS).}
+Con el fin de evitar que los keypoints seleccionados se concentren en las zonas de mayor textura de cada imagen, se aplicó A-NMS sobre los keypoints detectados por SIFT. Para cada punto se calculó un radio de supresión, definido como la distancia al punto clave más cercano cuya respuesta fuera mayor, de modo que los puntos con mayor radio corresponden a máximos locales dominantes dentro de una región amplia de la imagen. Como resultado, los puntos retenidos quedan mejor distribuidos espacialmente en toda la imagen, lo cual resulta conveniente tanto para la calidad de la homografía estimada posteriormente como para acotar el costo computacional de las etapas de matching y RANSAC que se presentarán a continuación.
 
-Sobre las imágenes en escala de grises se aplicó el detector SIFT (\texttt{cv2.SIFT\_create}), que identifica puntos distintivos —keypoints— a partir de extremos locales en un espacio de escala construido con diferencias de Gaussianas, y calcula para cada uno un descriptor de 128 valores basado en histogramas de orientación del gradiente alrededor del punto. Esta construcción hace que los descriptores sean robustos frente a cambios moderados de escala, rotación e iluminación entre fotografías, condición necesaria dado que las tres imágenes de cada conjunto fueron tomadas desde ángulos y distancias ligeramente distintos. La cantidad de keypoints detectados varió considerablemente entre conjuntos: en \textit{cuadro} se hallaron entre 450 y 490 keypoints por imagen, mientras que en \textit{UdeSA} se detectaron entre 2756 y 3120, reflejando la mayor cantidad de textura de alta frecuencia presente en la fachada del edificio, los árboles y el pasto frente a las regiones de color más planas del cuadro.
-
-\textbf{A-NMS.}
-
-\textcolor{lightgray}{\textbf{Párrafo 4:}
-Explicar que se aplicó Supresión de No-Máxima Adaptativa para quedarse con una cantidad fija de puntos mejor distribuidos en la imagen. Esto evita que todos los keypoints se concentren en una sola zona con mucha textura.}
-
-Con el fin de evitar que los keypoints seleccionados se concentren en las zonas de mayor textura de cada imagen, se aplicó Supresión de No Máxima Adaptativa (A-NMS) sobre los keypoints detectados por SIFT. Para cada punto se calculó un radio de supresión, definido como la distancia al keypoint más cercano cuya respuesta fuera mayor, de modo que los puntos con mayor radio corresponden a máximos locales dominantes dentro de una región amplia de la imagen. Ordenando los keypoints por este radio de forma descendente, se conservó una cantidad fija $N$ para cada imagen: 200 para el conjunto \textit{cuadro} y 500 para \textit{UdeSA}, valores elegidos en función de la cantidad inicial de keypoints detectados en cada caso. Como resultado, los puntos retenidos quedan mejor distribuidos espacialmente en toda la imagen, lo cual resulta conveniente tanto para la calidad de la homografía estimada posteriormente como para acotar el costo computacional de las etapas de matching y RANSAC.
+\newpage
 
 \textbf{Matching.}
-
-\textcolor{lightgray}{\textbf{Párrafo 5:}
-Explicar que se compararon los descriptores entre cada imagen lateral y la imagen ancla, es decir, entre las imágenes $0 \rightarrow 1$ y $2 \rightarrow 1$. Describir brevemente los métodos utilizados: cross-check, Lowe Ratio y el criterio combinado. Luego justificar que se eligió el criterio combinado porque prioriza matches más confiables antes de aplicar RANSAC.}
-
-Para relacionar los keypoints entre cada imagen lateral (0 y 2) y la imagen ancla (1) se evaluaron tres estrategias de matching sobre los descriptores SIFT, usando en todos los casos distancia euclídea ($L2$) por tratarse de descriptores de punto flotante. La estrategia de \textit{cross-check} exige que dos keypoints sean mutuamente su mejor vecino en ambas direcciones, y fue la que generó más correspondencias (84 y 74 para \textit{cuadro} $0\to1$ y $2\to1$; 186 y 168 para \textit{UdeSA}). El \textit{Lowe ratio} (umbral $=0.75$), en cambio, descarta matches ambiguos comparando la distancia al primer y al segundo vecino más cercano, y produjo un conjunto más chico (52 y 34 para \textit{cuadro}; 114 y 46 para \textit{UdeSA}). Finalmente, se implementó un criterio combinado que exige simultáneamente que el match supere el ratio de Lowe en ambas direcciones y que sea consistente bajo cross-check, obteniendo el conjunto más reducido pero también el de menor distancia media entre descriptores (40 y 16 correspondencias para \textit{cuadro}; 93 y 32 para \textit{UdeSA}). Se optó por este último criterio para las etapas siguientes, priorizando la confiabilidad de las correspondencias por sobre la cantidad, dado que RANSAC requiere partir de un conjunto de matches con la menor proporción posible de outliers para converger a una buena homografía.
+Para relacionar los keypoints entre cada imagen lateral (0 y 2) y la imagen ancla (1) se evaluaron tres estrategias de matching sobre los descriptores SIFT, usando en todos los casos distancia euclídea ($L2$) por tratarse de descriptores de punto flotante. La estrategia de \textit{cross-check} exige que dos keypoints sean mutuamente su mejor vecino en ambas direcciones. El \textit{Lowe ratio} (umbral $=0.75$), en cambio, descarta matches ambiguos comparando la distancia al primer y al segundo vecino más cercano. Finalmente, con el objetivo de ver los resultados de la combinación, se implementó un criterio combinado entre ambas estrategias que exige simultáneamente que el match supere el ratio de Lowe en ambas direcciones y que sea consistente bajo Cross-Check. Para la selección del método final, se priorizo la confiabilidad de las correspondencias por sobre la cantidad total de keypoints, dado que RANSAC requiere partir de un conjunto de matches con la menor proporción posible de outliers para converger a una buena homografía.
 
 \textbf{Homografía manual con DLT.}
-
-\textcolor{lightgray}{\textbf{Párrafo 6:}
-Explicar que se estimó una homografía manual usando cuatro pares de puntos correspondientes. Aclarar que esto se hizo sobre el conjunto del cuadro, donde era más sencillo identificar puntos sobre un mismo plano. Mencionar que DLT calcula una matriz que transforma puntos de una imagen al sistema de coordenadas de la imagen ancla.}
-
-Como complemento al método automático, se implementó el algoritmo DLT (\textit{Direct Linear Transformation}) sin utilizar OpenCV, para estimar una homografía a partir de exactamente cuatro correspondencias elegidas manualmente con ayuda de una grilla de referencia. Este procedimiento se aplicó sobre el conjunto \textit{cuadro}, donde la textura rica de la pintura permite identificar con precisión puntos físicos equivalentes en ambas imágenes (esquinas de figuras, extremos de trazos), repitiéndolo para los pares $0\to1$ y $2\to1$. Al elegir los puntos se evitó que quedaran alineados entre sí y se buscó que estuvieran razonablemente distribuidos dentro de la zona de solapamiento, para que el sistema lineal resultante no quedara mal condicionado. Ambas homografías reproyectan los cuatro puntos utilizados con error nulo (0.0000 px), lo cual es esperable dado que el sistema queda exactamente determinado por esos mismos cuatro pares y no constituye una medida de calidad sobre el resto de la imagen; por eso, además, se validó cada homografía aplicándola con \texttt{cv2.warpPerspective} sobre la imagen completa, verificando visualmente que la región del cuadro quedara alineada con la imagen ancla.
+Como complemento al método automático, se implementó el algoritmo DLT (\textit{Direct Linear Transformation}) para estimar una homografía a partir de exactamente cuatro correspondencias elegidas manualmente con ayuda de una grilla de referencia. Este procedimiento se aplicó sobre el conjunto \textit{cuadro}, donde la textura rica de la pintura permite identificar con precisión puntos físicos equivalentes en ambas imagenes (esquinas de figuras, extremos de trazos), repitiéndolo para los pares $0\to1$ y $2\to1$. Al elegir los puntos se evitó que quedaran alineados entre sí y se buscó que estuvieran razonablemente distribuidos dentro de la zona de solapamiento, para que el sistema lineal resultante no quedara mal condicionado. A su vez, se validó cada homografía aplicándola con \texttt{cv2.warpPerspective} sobre la imagen completa, verificando visualmente que la región del cuadro quedara alineada con la imagen ancla.
 
 \textbf{RANSAC.}
+Como los matches obtenidos con el criterio combinado todavía pueden incluir correspondencias incorrectas, se implementó RANSAC para estimar cada homografía de forma robusta. En cada una de las $T=2000$ iteraciones se seleccionaron cuatro correspondencias al azar, se calculó una homografía candidata con DLT, y se contó cuántas de todas las correspondencias disponibles resultaban \textit{inliers} —con un error de reproyección menor a 5 píxeles—, conservando la iteración que maximizó esa cantidad. La homografía definitiva se recalculó luego por mínimos cuadrados (SVD) usando únicamente el conjunto de inliers ganador, en lugar de los cuatro puntos originales, para aprovechar toda la evidencia disponible en vez de depender de una muestra mínima. 
 
-\textcolor{lightgray}{\textbf{Párrafo 7:}
-Explicar que los matches automáticos pueden incluir errores, por lo que se usó RANSAC para separar inliers y outliers. En cada iteración, RANSAC elige cuatro matches, calcula una homografía con DLT, mide el error de reproyección y cuenta cuántos puntos son consistentes con esa transformación. Finalmente, se conserva la mejor homografía y se recalcula usando todos los inliers.}
+\textbf{Warping, tamaño de canvas y panorámica final}
+Con las homografías finales de RANSAC, se calculó primero el tamaño óptimo del canvas donde se construiría cada panorámica: se transformaron las cuatro esquinas de cada imagen (ancla incluida) con su homografía correspondiente, y se tomaron los valores mínimos y máximos de esas coordenadas proyectadas para definir el ancho y alto necesarios. Como estas coordenadas pueden resultar negativas (dado que la esquina superior izquierda del canvas representa el $(0,0)$), se agregó una traslación a cada homografía de forma que todo el contenido quede dentro del canvas. Sobre el mismo, cada imagen se transformó con \texttt{cv2.warpPerspective} usando su homografía ya ajustada, y en simultáneo se generó una máscara de peso a partir de \texttt{cv2.distanceTransform}, que asigna a cada píxel un valor proporcional a su distancia al borde más cercano de la imagen warpeada (elevado a la cuarta potencia, para que el peso decaiga más rápido cerca de los bordes y las costuras queden menos marcadas). El panorama final se obtuvo como un promedio ponderado píxel a píxel entre las imagenes superpuestas, usando esas máscaras como pesos $W_i$ según $I = \sum_i W_i I_i / \sum_i W_i$, de modo que las zonas centrales de cada imagen, es decir, las más confiables, predominan sobre sus bordes en las regiones de solapamiento.
 
-Como los matches obtenidos con el criterio combinado todavía pueden incluir correspondencias incorrectas, se implementó RANSAC sin utilizar OpenCV para estimar cada homografía de forma robusta. En cada una de las $T=2000$ iteraciones se seleccionaron cuatro correspondencias al azar, se calculó una homografía candidata con DLT, y se contó cuántas de todas las correspondencias disponibles resultaban \textit{inliers} —con un error de reproyección menor a 5 píxeles—, conservando la iteración que maximizó esa cantidad. La homografía definitiva se recalculó luego por mínimos cuadrados (SVD) usando únicamente el conjunto de inliers ganador, en lugar de los cuatro puntos originales, para aprovechar toda la evidencia disponible en vez de depender de una muestra mínima. Los resultados variaron entre pares de imágenes: en \textit{cuadro} se obtuvo 77.5\% de inliers (31/40) con error de reproyección de 1.944 px para $0\to1$, y 50\% de inliers (8/16) con error de 0.934 px para $2\to1$; en \textit{UdeSA} las proporciones de inliers fueron notablemente mayores, 96.8\% (90/93, error 0.980 px) y 78.1\% (25/32, error 1.424 px) respectivamente. La mayor proporción de outliers observada en \textit{cuadro} $2\to1$ es consistente con la menor cantidad de correspondencias combinadas disponibles en ese par (apenas 16), donde un puñado de matches erróneos pesa proporcionalmente más sobre el resultado.
-
-\textbf{Warping, tamaño de canvas y panorámica final.}
-
-\textcolor{lightgray}{\textbf{Párrafo 8:}
-Explicar que, con las homografías finales, se transformaron las imágenes laterales para llevarlas al sistema de coordenadas de la imagen ancla. Luego se calculó el tamaño del canvas final para que entren todas las imágenes transformadas. Finalmente, se combinaron las imágenes para obtener la panorámica.}
-
-Con las homografías finales de RANSAC, se calculó primero el tamaño óptimo del canvas donde se construiría cada panorámica: se transformaron las cuatro esquinas de cada imagen (ancla incluida) con su homografía correspondiente, y se tomaron los valores mínimos y máximos de esas coordenadas proyectadas para definir el ancho y alto necesarios. Como estas coordenadas pueden resultar negativas, se agregó una traslación a cada homografía de forma que todo el contenido quede dentro del canvas. Sobre ese canvas, cada imagen se transformó con \texttt{cv2.warpPerspective} usando su homografía ya ajustada, y en simultáneo se generó una máscara de peso a partir de \texttt{cv2.distanceTransform}, que asigna a cada píxel un valor proporcional a su distancia al borde más cercano de la imagen warpeada (elevado a la cuarta potencia, para que el peso decaiga más rápido cerca de los bordes y las costuras queden menos marcadas). El panorama final se obtuvo como un promedio ponderado píxel a píxel entre las imágenes superpuestas, usando esas máscaras como pesos $W_i$ según $I = \sum_i W_i I_i / \sum_i W_i$, de modo que las zonas centrales de cada imagen —más confiables— predominan sobre sus bordes en las regiones de solapamiento.
-
-\textbf{Tamaño y formato de las imágenes.}
-
-\textcolor{lightgray}{\textbf{Párrafo 9:}
-Aclarar que las imágenes fueron reducidas cuando fue necesario para que el procesamiento fuera más eficiente y para cumplir con el tamaño recomendado por la consigna.}
-
-Tanto las imágenes de entrada como las panorámicas resultantes se guardaron en formato \texttt{.jpg}. Las imágenes de entrada se redujeron a 1000 píxeles en su lado mayor antes de procesarlas (Sección \textit{Carga y preprocesamiento}), y las panorámicas finales se exportaron con calidad JPEG 90, cumpliendo con el límite de tamaño por archivo sugerido en la consigna sin introducir artefactos de compresión perceptibles.
+\textbf{Tamaño y formato de las imagenes.}
+Tanto las imagenes de entrada como las panorámicas resultantes se guardaron en formato \texttt{.jpg}. Las imagenes de entrada se redujeron a 1000 píxeles en su lado mayor antes de procesarlas (Sección \textit{Carga y preprocesamiento}), y las panorámicas finales se exportaron con calidad JPEG 90, cumpliendo con el límite de tamaño por archivo sugerido en la consigna sin introducir artefactos de compresión perceptibles.
 
 \section{Resultados}
+
+\subsection*{Detección de keypoints y A-NMS}
+La cantidad de keypoints detectados por SIFT varió considerablemente entre conjuntos: en \textit{cuadro} se hallaron entre 450 y 490 por imagen, mientras que en \textit{UdeSA} se detectaron entre 2756 y 3120, reflejando la mayor cantidad de textura de alta frecuencia presente en la fachada del edificio, los árboles y el pasto, frente a las regiones de color más planas del cuadro. Sobre ese total se aplicó A-NMS, conservando una cantidad fija $N$ por imagen: 200 para \textit{cuadro} y 500 para \textit{UdeSA}, valores elegidos en función de la cantidad inicial detectada en cada caso. La Figura~\ref{fig:anms} muestra el efecto sobre la imagen ancla de \textit{cuadro}: los puntos retenidos quedan mejor distribuidos espacialmente en lugar de concentrarse en las zonas de mayor detalle.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\linewidth]{img/anms_cuadro.png}
+    \caption{Keypoints SIFT antes y después de aplicar A-NMS (imagen ancla, conjunto \textit{cuadro}).}
+    \label{fig:anms}
+\end{figure}
+
+\subsection*{Matching}
+De las tres estrategias evaluadas, \textit{cross-check} fue la que generó más correspondencias (84 y 74 para \textit{cuadro} $0\to1$ y $2\to1$; 186 y 168 para \textit{UdeSA}), mientras que el \textit{Lowe ratio} produjo un conjunto más chico (52 y 34 para \textit{cuadro}; 114 y 46 para \textit{UdeSA}). El criterio combinado, exigiendo ambas condiciones simultáneamente, dio el conjunto más reducido pero con menor distancia media entre descriptores (40 y 16 correspondencias para \textit{cuadro}; 93 y 32 para \textit{UdeSA}), por lo que fue el elegido para las etapas siguientes. La Figura~\ref{fig:matching} compara, para \textit{cuadro}, los matches sin filtrar contra los que sobreviven al criterio combinado.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\linewidth]{img/matching_combinado_cuadro.png}
+    \caption{Correspondencias sin filtrar (arriba) vs. criterio combinado (abajo), conjunto \textit{cuadro}.}
+    \label{fig:matching}
+\end{figure}
+
+\subsection*{Homografía manual (DLT)}
+Ambas homografías manuales reproyectan los cuatro puntos utilizados con error nulo (0.0000 px), lo cual es esperable dado que el sistema queda exactamente determinado por esos mismos cuatro pares y no constituye una medida de calidad sobre el resto de la imagen. Por eso se validó cada homografía aplicándola sobre la imagen completa (Figura~\ref{fig:dlt}), confirmando visualmente que la región del cuadro queda alineada con la imagen ancla.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{img/dlt_manual_cuadro_0_1.png}
+    \caption{Homografía manual (DLT) aplicada sobre la imagen completa, par $0\to1$ de \textit{cuadro}.}
+    \label{fig:dlt}
+\end{figure}
+
+\subsection*{RANSAC}
+Los resultados variaron entre pares de imagenes: en \textit{cuadro} se obtuvo 77.5\% de inliers (31/40) con error de reproyección de 1.944 px para $0\to1$, y 50\% de inliers (8/16) con error de 0.934 px para $2\to1$; en \textit{UdeSA} las proporciones de inliers fueron notablemente mayores, 96.8\% (90/93, error 0.980 px) y 78.1\% (25/32, error 1.424 px) respectivamente. La mayor proporción de outliers observada en \textit{cuadro} $2\to1$ es consistente con la menor cantidad de correspondencias combinadas disponibles en ese par (apenas 16), donde un puñado de matches erróneos pesa proporcionalmente más sobre el resultado. La Figura~\ref{fig:ransac} muestra, para el par $0\to1$ de cada conjunto, los inliers (verde) y outliers (rojo) detectados.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/ransac_inliers_cuadro_0_1.png}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/ransac_inliers_udesa_0_1.png}
+    \end{minipage}
+    \caption{Inliers (verde) y outliers (rojo) tras RANSAC, par $0\to1$: \textit{cuadro} (izq.) y \textit{UdeSA} (der.).}
+    \label{fig:ransac}
+\end{figure}
+
+\newpage
+
+\subsection*{Panorámica final}
+Con las homografías finales de RANSAC se construyeron las panorámicas de ambos conjuntos provistos (Figura~\ref{fig:panoramas}), aplicando el cálculo de canvas óptimo y el blending por distancia descritos en la Sección de Método. En \textit{UdeSA}, donde la escena se aproxima mejor a un plano único y las homografías tuvieron mayor proporción de inliers, la unión resulta prácticamente imperceptible. En \textit{cuadro}, en cambio, se notan leves desalineaciones en la mesa y el borde inferior del cuadro, consistentes con que esos elementos no pertenecen exactamente al mismo plano que la superficie pintada usada para estimar la homografía.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{img/panorama_final_cuadro.png}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{img/panorama_final_udesa.png}
+    \end{minipage}
+    \caption{Panorámicas finales: \textit{cuadro} (izq.) y \textit{UdeSA} (der.).}
+    \label{fig:panoramas}
+\end{figure}
+
+\subsection*{Imágenes propias}
+Se aplicó el mismo pipeline completo sobre tres conjuntos propios tomados en la universidad (Figura~\ref{fig:propias}): un ascensor, la biblioteca y una pecera. Los resultados de RANSAC fueron dispares: \textit{pecera} obtuvo el mejor ajuste (100\% y 98.8\% de inliers, error de 0.68 y 0.87 px), \textit{ascensor} un resultado intermedio (94.1\% y 99.2\% de inliers), y \textit{biblioteca} el más débil (68.4\% y 70.8\% de inliers), consistente con una escena con mayor profundidad y más planos distintos entre sí.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.32\linewidth]{img/panorama_final_ascensor.png}
+    \includegraphics[width=0.32\linewidth]{img/panorama_final_biblioteca.png}
+    \includegraphics[width=0.32\linewidth]{img/panorama_final_pecera.png}
+    \caption{Panorámicas de los conjuntos propios: ascensor, biblioteca y pecera.}
+    \label{fig:propias}
+\end{figure}
+
 \end{document}
