@@ -383,3 +383,20 @@ def superponer_imagenes(base, transformada, alpha = 0.5):
     resultado = base.copy()
     resultado[mascara] = mezcla[mascara]
     return resultado
+
+def graficar_mascara(pesos:list):
+    # Graficamos la máscara
+    plt.figure(figsize = (15, 5))
+    titulos = ["Imagen 0", "Imagen 1 (ancla)", "Imagen 2"]
+
+    for idx, peso in enumerate(pesos):
+        peso_norm = cv2.normalize(peso, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+        plt.subplot(1, 3, idx + 1)
+        plt.imshow(peso_norm, cmap='gray')
+        plt.title(titulos[idx])
+        plt.axis('off')
+
+    plt.suptitle("Máscaras (pesos) aplicadas a cada imagen")
+    plt.tight_layout()
+    plt.show()
