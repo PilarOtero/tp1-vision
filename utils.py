@@ -696,6 +696,8 @@ def graficar_mascara(pesos:list[np.ndarray]):
     plt.show()
 
 def comparar_recorte(panorama_bajo, panorama_alto, titulo):
+    from i308_utils import show_images  # se instala/importa recien en el notebook
+
     alto_bajo, ancho_bajo = panorama_bajo.shape[:2]
     alto_alto, ancho_alto = panorama_alto.shape[:2]
 
