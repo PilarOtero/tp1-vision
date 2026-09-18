@@ -99,10 +99,10 @@ def resumen_matches(matches, nombre):
     }
 
 def obtener_matches_combinado(desc_src, desc_dst, ratio = 0.75):
-    # Obtenemos los matches con cross-check ya que era el metodo que mas hallaba
+    # Usamos fuerza bruta para aplicar Lowe Ratio en ambos sentidos.
     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck = False)
 
-    # Calculamos los matches con FLANN + Lowe y cross-check (para obtener una distancia exacta)
+    # Calculamos los dos vecinos mas cercanos en ambos sentidos.
     knn_src_dest = bf.knnMatch(desc_src, desc_dst, k = 2)
     knn_dst_src = bf.knnMatch(desc_dst, desc_src, k = 2)
 
