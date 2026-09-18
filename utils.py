@@ -694,3 +694,18 @@ def graficar_mascara(pesos:list[np.ndarray]):
     plt.suptitle("Máscaras (pesos) aplicadas a cada imagen")
     plt.tight_layout()
     plt.show()
+
+def comparar_recorte(panorama_bajo, panorama_alto, titulo):
+    alto_bajo, ancho_bajo = panorama_bajo.shape[:2]
+    alto_alto, ancho_alto = panorama_alto.shape[:2]
+
+    cx_b, cy_b = ancho_bajo // 2, alto_bajo // 2
+    w_b, h_b = ancho_bajo // 4, alto_bajo // 4
+    recorte_bajo = panorama_bajo[cy_b - h_b:cy_b + h_b, cx_b - w_b:cx_b + w_b]
+
+    cx_a, cy_a = ancho_alto // 2, alto_alto // 2
+    w_a, h_a = ancho_alto // 4, alto_alto // 4
+    recorte_alto = panorama_alto[cy_a - h_a:cy_a + h_a, cx_a - w_a:cx_a + w_a]
+
+    recorte_bajo_reescalado = cv2.resize(recorte_bajo, (recorte_alto.shape[1], recorte_alto.shape[0]), interpolation=cv2.INTER_NEAREST)
+    show_images([recorte_bajo_reescalado, recorte_alto], titles=[f'{titulo} - achicada (reescalada)', f'{titulo} - alta resolución'], figsize=(16, 8))
