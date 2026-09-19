@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -308,7 +309,7 @@ def _dibujar_grupos_puntos(ax:plt.Axes, grupos:list[dict]):
     if any(g.get("label") for g in grupos):
         ax.legend(loc = "upper right", fontsize = 8)
 
-def mostrar_imagen_con_grilla(img, titulo:str = "", paso:int = 50, figsize:tuple[int,int] = (12, 10), puntos:list[dict] = None):
+def mostrar_imagen_con_grilla(img, titulo:str = "", paso:int = 50, figsize:tuple[int,int] = (12, 10), puntos:list[dict] = None, guardar:str = None):
     """
     Muestra una imagen o lista de imagenes (en este caso, en subplots) con una grilla superpuesta, marcando los valores en los ejes, de forma de permitir definir las coordenadas
     a simple vista. Opcionalmente, superpone grupos de puntos
@@ -319,7 +320,11 @@ def mostrar_imagen_con_grilla(img, titulo:str = "", paso:int = 50, figsize:tuple
             paso(int): separación en píxeles entre líneas de la grilla
             figsize(tuple[int, int]): tamaño de la figura
             puntos(list[dict]): grupos de puntos a superponer, o lista de grupos (uno por imagen) si imagen es una lista
+            guardar(str): si se especifica, ruta de archivo donde guardar la figura (se crean las carpetas necesarias)
     """
+    if guardar is not None:
+        os.makedirs(os.path.dirname(guardar), exist_ok=True)
+
     if isinstance(img, (list, tuple)):
         imagenes = img
         titulos = titulo
@@ -347,6 +352,8 @@ def mostrar_imagen_con_grilla(img, titulo:str = "", paso:int = 50, figsize:tuple
             _dibujar_grupos_puntos(ax, grupos)
 
         plt.tight_layout()
+        if guardar is not None:
+            plt.savefig(guardar, dpi=150, bbox_inches="tight")
         plt.show()
         return
 
@@ -366,6 +373,8 @@ def mostrar_imagen_con_grilla(img, titulo:str = "", paso:int = 50, figsize:tuple
 
     _dibujar_grupos_puntos(ax, puntos)
 
+    if guardar is not None:
+        plt.savefig(guardar, dpi=150, bbox_inches="tight")
     plt.show()
 
 def dlt(src:np.ndarray, dst:np.ndarray) -> np.ndarray:
